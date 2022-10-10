@@ -1,0 +1,29 @@
+libccd (2.1-2) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Set debhelper-compat version in Build-Depends.
+  * Set upstream metadata fields: Repository, Repository-Browse.
+  * Set upstream metadata fields: Bug-Database, Bug-Submit.
+
+  [ Jose Luis Rivero ]
+  * Bump standards to 4.6.0
+  * Bump debhelper to 13
+  * Package cmake helpers in -dev package
+  * Skip the installation of license file
+  * Update watch file to version 4
+  * Add rules-require-root no
+
+ -- Jose Luis Rivero <jrivero@osrfoundation.org>  Mon, 15 Nov 2021 19:56:52 +0000
+
+libccd (2.1-1) unstable; urgency=medium
+
+  * Update Standards
+  * New upstream version 2.1
+
+ -- Jose Luis Rivero <jrivero@osrfoundation.org>  Wed, 26 Dec 2018 15:23:26 +0000
+
+libccd (2.0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #722266)
+
+ -- Jose Luis Rivero <jrivero@osrfoundation.org>  Mon, 24 Mar 2014 16:51:48 +0000

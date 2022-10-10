@@ -1,0 +1,176 @@
+#!/bin/sh
+# autopkgtest check: Build and run a program against libccd,
+# to verify that the headers and pkg-config file are installed
+# correctly
+# (C) 2013 Thomas Moulard
+# Author: Thomas Moulard <thomas.moulard@gmail.com>
+
+set -e
+
+WORKDIR=$(mktemp -d)
+trap "rm -rf $WORKDIR" 0 INT QUIT ABRT PIPE TERM
+cd $WORKDIR
+cat <<EOF > libccdtest.cpp
+#include <ccd/ccd.h>
+#include <ccd/quat.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+#define CCD_OBJ_BOX 1
+#define CCD_OBJ_SPHERE 2
+#define CCD_OBJ_CYL 3
+
+#define __CCD_OBJ__ \
+    int type; \
+    ccd_vec3_t pos; \
+    ccd_quat_t quat;
+
+struct _ccd_obj_t {
+    __CCD_OBJ__
+};
+typedef struct _ccd_obj_t ccd_obj_t;
+
+struct _ccd_box_t {
+    __CCD_OBJ__
+    ccd_real_t x, y, z; //!< Lengths of box's edges
+};
+typedef struct _ccd_box_t ccd_box_t;
+
+struct _ccd_sphere_t {
+    __CCD_OBJ__
+    ccd_real_t radius;
+};
+typedef struct _ccd_sphere_t ccd_sphere_t;
+
+struct _ccd_cyl_t {
+    __CCD_OBJ__
+    ccd_real_t radius;
+    ccd_real_t height;
+};
+typedef struct _ccd_cyl_t ccd_cyl_t;
+
+
+#define CCD_BOX(name) \
+    ccd_box_t name = { .type = CCD_OBJ_BOX, \
+                       .pos  = { .v = { 0., 0., 0. } }, \
+                       .quat = { .q = { 0., 0., 0., 1. } }, \
+                       .x = 0., \
+                       .y = 0., \
+                       .z = 0. }
+
+#define CCD_SPHERE(name) \
+    ccd_sphere_t name = { .type = CCD_OBJ_SPHERE, \
+                          .pos  = { .v = { 0., 0., 0. } }, \
+                          .quat = { .q = { 0., 0., 0., 1. } }, \
+                          .radius = 0. }
+
+#define CCD_CYL(name) \
+    ccd_cyl_t name = { .type = CCD_OBJ_CYL, \
+                       .pos  = { .v = { 0., 0., 0. } }, \
+                       .quat = { .q = { 0., 0., 0., 1. } }, \
+                       .radius = 0., \
+                       .height = 0. }
+
+/**
+ * Returns supporting vertex via v.
+ * Supporting vertex is fathest vertex from object in direction dir.
+ */
+void ccdSupport(const void *obj, const ccd_vec3_t *dir,
+                ccd_vec3_t *v);
+
+/**
+ * Returns center of object.
+ */
+void ccdObjCenter(const void *obj, ccd_vec3_t *center);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif /* __cplusplus */
+
+void ccdSupport(const void *_obj, const ccd_vec3_t *_dir,
+                ccd_vec3_t *v)
+{
+    // Support function is made according to Gino van den Bergen's paper
+    //  A Fast and Robust CCD Implementation for Collision Detection of
+    //  Convex Objects
+
+    ccd_obj_t *obj = (ccd_obj_t *)_obj;
+    ccd_vec3_t dir;
+    ccd_quat_t qinv;
+
+    ccdVec3Copy(&dir, _dir);
+    ccdQuatInvert2(&qinv, &obj->quat);
+
+    ccdQuatRotVec(&dir, &qinv);
+
+    if (obj->type == CCD_OBJ_BOX){
+        ccd_box_t *box = (ccd_box_t *)obj;
+        ccdVec3Set(v, ccdSign(ccdVec3X(&dir)) * box->x * CCD_REAL(0.5),
+                      ccdSign(ccdVec3Y(&dir)) * box->y * CCD_REAL(0.5),
+                      ccdSign(ccdVec3Z(&dir)) * box->z * CCD_REAL(0.5));
+    }else if (obj->type == CCD_OBJ_SPHERE){
+        ccd_sphere_t *sphere = (ccd_sphere_t *)obj;
+        ccd_real_t len;
+
+        len = ccdVec3Len2(&dir);
+        if (len - CCD_EPS > CCD_ZERO){
+            ccdVec3Copy(v, &dir);
+            ccdVec3Scale(v, sphere->radius / CCD_SQRT(len));
+        }else{
+            ccdVec3Set(v, CCD_ZERO, CCD_ZERO, CCD_ZERO);
+        }
+    }else if (obj->type == CCD_OBJ_CYL){
+        ccd_cyl_t *cyl = (ccd_cyl_t *)obj;
+        ccd_real_t zdist, rad;
+
+        zdist = dir.v[0] * dir.v[0] + dir.v[1] * dir.v[1];
+        zdist = CCD_SQRT(zdist);
+        if (ccdIsZero(zdist)){
+            ccdVec3Set(v, CCD_ZERO, CCD_ZERO,
+                          ccdSign(ccdVec3Z(&dir)) * cyl->height * CCD_REAL(0.5));
+        }else{
+            rad = cyl->radius / zdist;
+
+            ccdVec3Set(v, rad * ccdVec3X(&dir),
+                          rad * ccdVec3Y(&dir),
+                          ccdSign(ccdVec3Z(&dir)) * cyl->height * CCD_REAL(0.5));
+        }
+    }
+
+    // transform support vertex
+    ccdQuatRotVec(v, &obj->quat);
+    ccdVec3Add(v, &obj->pos);
+}
+
+void ccdObjCenter(const void *_obj, ccd_vec3_t *center)
+{
+    ccd_obj_t *obj = (ccd_obj_t *)_obj;
+
+    ccdVec3Set(center, CCD_ZERO, CCD_ZERO, CCD_ZERO);
+    // rotation is not needed
+    ccdVec3Add(center, &obj->pos);
+}
+int main()
+{
+    size_t i;
+    ccd_t ccd;
+    CCD_BOX(box1);
+    CCD_BOX(box2);
+    int res;
+
+    CCD_INIT(&ccd);
+    ccd.support1 = ccdSupport;
+    ccd.support2 = ccdSupport;
+ 
+    return 0;
+}
+EOF
+
+g++ -o libccdtest libccdtest.cpp \
+    `pkg-config --cflags --libs ccd`
+echo "build: OK"
+[ -x libccdtest ]
+./libccdtest
+echo "run: OK"

@@ -1,0 +1,2 @@
+Tests: build
+Depends: libccd-dev, build-essential, pkg-config

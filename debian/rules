@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+bindnow
+
+.PHONY: override_dh_auto_configure
+
+override_dh_auto_configure:
+	dh_auto_configure --  \
+	    -DCCD_DOUBLE:BOOL=True
+
+# Avoid to run the legacy autotools files and use cmake
+%:
+	dh $@ --buildsystem=cmake --without autoreconf

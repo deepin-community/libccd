@@ -1,0 +1,4 @@
+usr/include/*
+usr/lib/*/ccd/*.cmake
+usr/lib/*/pkgconfig/*.pc
+usr/lib/*/*.so
